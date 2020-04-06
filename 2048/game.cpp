@@ -3,8 +3,16 @@
 
 #define max(a, b) ((a > b) ? a : b)
 
+#define OUTPUT_LINE_DICT 1
+
+bool Board::isLineDictReady = false;
+array<short, LINE_DICT_SIZE> Board::lineDict;
+
 Board::Board()
 {
+	if (!Board::isLineDictReady)
+		Board::InitLineDict();
+
 	Clear();
 }
 
@@ -64,16 +72,120 @@ void Board::Print()
 	}
 }
 
+// line grid order: 3, 2, 1, 0
+void Board::InitLineDict()
+{
+	FILE *fp;
+	if (OUTPUT_LINE_DICT)
+		fopen_s(&fp, "line_dict.txt", "w");
+
+	int validIdCount, resultCount;
+	array<char, BOARD_SIZE> line, result, validId, allId;
+
+	for (int i = 0; i < LINE_DICT_SIZE; ++i)
+	{
+		// init line
+		Board::Key2Line(i, line);
+
+		// collect valid grids
+		validIdCount = 0;
+		validId.fill(0);
+
+		for (int j = 0; j < BOARD_SIZE; ++j)
+		{
+			if (line[j] > 0)
+			{
+				validId[validIdCount++] = j;
+			}
+			allId[j] = j;
+		}
+
+		// move & combine
+		resultCount = 0;
+		result.fill(0);
+
+		if (validIdCount > 0)
+			result[0] = line[validId[0]];
+
+		int v0 = -1, v1;
+
+		for (int j = 0; j < validIdCount; ++j)
+		{
+			v1 = line[validId[j]];
+
+			if (v0 == -1)
+			{
+				result[resultCount] = v1;
+				v0 = v1;
+			}
+			else if (v0 == v1)
+			{
+				result[resultCount++] = v0 + 1;
+				v0 = -1;
+			}
+			else
+			{
+				result[resultCount++] = v0;
+				result[resultCount] = v1;
+				v0 = v1;
+			}
+		}
+
+		// calc line result
+		int value = Board::Line2Key(result);
+		lineDict[i] = value;
+
+		if (OUTPUT_LINE_DICT && value != i)
+		{
+			fprintf(fp, "%6d: ", i);
+			for (int j = 0; j < BOARD_SIZE; ++j)
+			{
+				int num = line[j] > 0 ? (1 << line[j]) : 0;
+				fprintf(fp, "%6d", num);
+			}
+			fprintf(fp, " | ");
+
+			for (int j = 0; j < BOARD_SIZE; ++j)
+			{
+				int num = result[j] > 0 ? (1 << result[j]) : 0;
+				fprintf(fp, "%6d", num);
+			}
+			fprintf(fp, "\n");
+		}
+	}
+
+	if (OUTPUT_LINE_DICT)
+		fclose(fp);
+
+	Board::isLineDictReady = true;
+}
+
+int Board::Line2Key(const array<char, BOARD_SIZE> &line)
+{
+	int key = 0;
+	for (int i = BOARD_SIZE - 1; i >= 0; --i)
+	{
+		key = (key << 4) + line[i];
+	}
+	return key;
+}
+
+void Board::Key2Line(int key, array<char, BOARD_SIZE> &line)
+{
+	for (int i = 0; i < BOARD_SIZE; ++i)
+	{
+		line[i] = key & 0xf;
+		key = key >> 4;
+	}
+}
+
 bool Board::Move(Direction d)
 {
 	bool isChange = false;
+	array<char, BOARD_SIZE> line, allId;
 
 	for (int i = 0; i < BOARD_SIZE; ++i)
 	{
-		int validIdCount = 0;
-		int validId[BOARD_SIZE] = { 0 };
-		int allId[BOARD_SIZE];
-
 		for (int j = 0; j < BOARD_SIZE; ++j)
 		{
 			int id;
@@ -92,44 +204,21 @@ bool Board::Move(Direction d)
 				id = Board::Coord2Id(BOARD_SIZE - j - 1, i);
 				break;
 			}
-
-			if (grids[id] > 0)
-			{
-				if (j != validIdCount)
-					isChange = true;
-
-				validId[validIdCount++] = id;	
-			}
 			allId[j] = id;
+			line[j] = grids[id];
 		}
-		
-		int resultCount = 0;
-		int results[BOARD_SIZE] = { 0 };
-		
-		if (validIdCount > 0)
-			results[0] = grids[validId[0]];
+		int key = Board::Line2Key(line);
+		int value = Board::lineDict[key];
 
-		for (int k = 1; k < validIdCount; ++k)
+		if (value != key)
 		{
-			int v0 = grids[validId[k - 1]];
-			int v1 = grids[validId[k]];
+			isChange = true;
+			Board::Key2Line(value, line);
 
-			if (v0 == v1)
+			for (int j = 0; j < BOARD_SIZE; ++j)
 			{
-				results[resultCount++] = v0 + 1;
-				isChange = true;
-				++k;
+				grids[allId[j]] = line[j];
 			}
-			else
-			{
-				results[resultCount++] = v0;
-				results[resultCount] = v1;
-			}
-		}
-		
-		for (int j = 0; j < BOARD_SIZE; ++j)
-		{
-			grids[allId[j]] = results[j];
 		}
 	}
 
@@ -149,15 +238,7 @@ void Board::Id2Coord(int id, int &row, int &col)
 
 ///////////////////////////////////////////////////////////////////////
 
-
-///////////////////////////////////////////////////////////////////
-
-Game::Game()
-{
-	Init();
-}
-
-void Game::Init()
+void GameBase::Init()
 {
 	state = E_NORMAL;
 	turn = 1;
@@ -169,35 +250,30 @@ void Game::Init()
 	Generate();
 }
 
-bool Game::IsGameFinish()
+bool GameBase::Move(int move)
 {
-	return state != E_NORMAL;
-}
-
-void Game::Print()
-{
-	cout << "\n  ===== Current Board =====" << endl;
-	board.Print();
-}
-
-bool Game::Move(int direction)
-{
-	if (!board.Move((Board::Direction)direction))
-		return false;
-
-	UpdateValidGrids();
-
-	if (validGridCount == 0)
+	if (turn % 2 == 1)
 	{
-		state = E_LOSE;
-		return true;
+		if (!board.Move((Board::Direction)move))
+			return false;
+
+		UpdateValidGrids();
+
+		if (validGridCount == 0)
+		{
+			state = E_LOSE;
+		}
 	}
-	
-	Generate();
+	else
+	{
+		Generate(move);
+	}
+
+	++turn;
 	return true;
 }
 
-void Game::UpdateValidGrids()
+void GameBase::UpdateValidGrids()
 {
 	validGridCount = 0;
 	for (int i = 0; i < GRID_NUM; ++i)
@@ -207,12 +283,40 @@ void Game::UpdateValidGrids()
 	}
 }
 
-void Game::Generate()
+void GameBase::Generate(int id)
 {
-	int id = rand() % validGridCount;
+	if (id == -1)
+		id = rand() % validGridCount;
 
 	int value = (rand() % 10 == 0) ? 2 : 1;
 	board.grids[validGrids[id]] = value;
 
 	swap(validGrids[id], validGrids[--validGridCount]);
+}
+
+///////////////////////////////////////////////////////////////////
+
+Game::Game()
+{
+	Init();
+}
+
+bool Game::Move(int direction)
+{
+	if (!GameBase::Move(direction))
+		return false;
+
+	GameBase::Move();
+	return true;
+}
+
+bool Game::IsGameFinish()
+{
+	return state != E_NORMAL;
+}
+
+void Game::Print()
+{
+	cout << "\n  ===== Current Board =====" << endl;
+	board.Print();
 }

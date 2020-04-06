@@ -26,8 +26,14 @@ int main()
 		else
 			move = -1;
 
-		g.Move(move);
-		g.Print();
+		if (g.Move(move))
+		{
+			g.Print();
+		}
+		else
+		{
+			cout << "Invalid move!" << endl;
+		}
 	}
 
 	return 0;
