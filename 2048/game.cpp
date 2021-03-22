@@ -1,4 +1,5 @@
 #include "game.h"
+#include <cmath>
 #include <cstdlib>
 
 #define max(a, b) ((a > b) ? a : b)
@@ -10,6 +11,7 @@ Board::Board()
 
 void Board::Clear()
 {
+	maxValue = 0;
 	grids.fill(0);
 }
 
@@ -117,8 +119,12 @@ bool Board::Move(Direction d)
 			if (v0 == v1)
 			{
 				results[resultCount++] = v0 + 1;
+				maxValue = max(maxValue, v0 + 1);
 				isChange = true;
 				++k;
+
+				if (k < validIdCount)
+					results[resultCount] = grids[validId[k]];
 			}
 			else
 			{
@@ -134,6 +140,43 @@ bool Board::Move(Direction d)
 	}
 
 	return isChange;
+}
+
+bool Board::Check(Direction d)
+{
+	for (int i = 0; i < BOARD_SIZE; ++i)
+	{
+		int lastValue = -1;
+		for (int j = 0; j < BOARD_SIZE; ++j)
+		{
+			int id;
+			switch (d)
+			{
+			case Board::E_UP:
+				id = Board::Coord2Id(j, i);
+				break;
+			case Board::E_LEFT:
+				id = Board::Coord2Id(i, j);
+				break;
+			case Board::E_RIGHT:
+				id = Board::Coord2Id(i, BOARD_SIZE - j - 1);
+				break;
+			case Board::E_DOWN:
+				id = Board::Coord2Id(BOARD_SIZE - j - 1, i);
+				break;
+			}
+
+			int value = grids[id];
+			if (value > 0)
+			{
+				if (lastValue == 0 || value == lastValue)
+					return true;
+
+			}
+			lastValue = value;
+		}
+	}
+	return false;
 }
 
 int Board::Coord2Id(int row, int col)
@@ -152,12 +195,12 @@ void Board::Id2Coord(int id, int &row, int &col)
 
 ///////////////////////////////////////////////////////////////////
 
-Game::Game()
+GameBase::GameBase()
 {
 	Init();
 }
 
-void Game::Init()
+void GameBase::Init()
 {
 	state = E_NORMAL;
 	turn = 1;
@@ -165,39 +208,113 @@ void Game::Init()
 	board.Clear();
 	UpdateValidGrids();
 
-	Generate();
-	Generate();
+	RandomGenerate();
+	RandomGenerate();
+
+	turn = 1; // reset turn to 1
 }
 
-bool Game::IsGameFinish()
+bool GameBase::IsGameFinish()
 {
 	return state != E_NORMAL;
 }
 
-void Game::Print()
+int GameBase::GetSide()
 {
-	cout << "\n  ===== Current Board =====" << endl;
-	board.Print();
+	return (turn % 2 == 1) ? Board::E_PLAYER : Board::E_SYSTEM;
 }
 
-bool Game::Move(int direction)
+int GameBase::GetNextMove()
+{
+	if (GetSide() == Board::E_PLAYER)
+	{
+		// naive stategy
+		static int direction[2][4] = 
+		{
+			{ Board::E_LEFT, Board::E_UP, Board::E_RIGHT, Board::E_DOWN },
+			{ Board::E_UP, Board::E_LEFT, Board::E_RIGHT, Board::E_DOWN }
+		};
+
+		int i = rand() % 2;
+		int j = 0;
+		while (!board.Check((Board::Direction)direction[i][j]))
+		{
+			++j;
+		}
+		return direction[i][j];
+	}
+	else // E_SYSTEM
+	{
+		int id = rand() % validGridCount;
+		int value = (rand() % 10 == 0) ? 2 : 1;
+		int action = GameBase::EncodeAction(id, value);
+		return action;
+	}
+}
+
+float GameBase::CalcScore()
+{
+	float score1 = powf(2.f, (board.maxValue - WIN_CONDITION)); // 0.25, 0.5, 1, 2
+	float score2 = (turn - 200.f) / 1000.f;
+	float score = score1 * 0.5f + score2 * 0.5f;
+	return score;
+}
+
+void GameBase::GetValidActions(array<uint8_t, VALID_ACTION_MAX> &result, int &count)
+{
+	count = 0;
+	if (GetSide() == Board::E_PLAYER)
+	{
+		for (int d = 0; d < Board::E_DIRECTION_MAX; ++d)
+		{
+			if (board.Check((Board::Direction)d))
+				result[count++] = d;
+		}
+	}
+	else // E_SYSTEM
+	{
+		for (int i = 0; i < validGridCount; ++i)
+		{
+			result[count++] = GameBase::EncodeAction(validGrids[i], 1);
+			result[count++] = GameBase::EncodeAction(validGrids[i], 2);
+		}
+	}
+}
+
+void GameBase::Move(int action)
+{
+	if (GetSide() == Board::E_PLAYER)
+	{
+		PlayerMove(action);
+	}
+	else // E_SYSTEM
+	{
+		int id, value;
+		GameBase::DecodeAction(action, id, value);
+		Generate(id, value);
+	}
+}
+
+bool GameBase::PlayerMove(int direction)
 {
 	if (!board.Move((Board::Direction)direction))
 		return false;
 
+	lastMove = direction;
 	UpdateValidGrids();
 
-	if (validGridCount == 0)
+	if (board.maxValue >= WIN_CONDITION)
 	{
-		state = E_LOSE;
+		state = E_WIN;
 		return true;
 	}
+
+	++turn;
 	
-	Generate();
 	return true;
 }
 
-void Game::UpdateValidGrids()
+void GameBase::UpdateValidGrids()
 {
 	validGridCount = 0;
 	for (int i = 0; i < GRID_NUM; ++i)
@@ -207,12 +324,91 @@ void Game::UpdateValidGrids()
 	}
 }
 
-void Game::Generate()
+void GameBase::RandomGenerate()
 {
 	int id = rand() % validGridCount;
-
 	int value = (rand() % 10 == 0) ? 2 : 1;
+	Generate(id, value);
+}
+
+void GameBase::Generate(int id, int value)
+{
 	board.grids[validGrids[id]] = value;
 
 	swap(validGrids[id], validGrids[--validGridCount]);
+
+	if (validGridCount == 0)
+		CheckLoseCondition();
+
+	++turn;
+}
+
+void GameBase::CheckLoseCondition()
+{
+	bool hasMove = false;
+	for (int d = 0; d < Board::E_DIRECTION_MAX; ++d)
+	{
+		if (board.Check((Board::Direction)d))
+		{
+			hasMove = true;
+			break;
+		}
+	}
+
+	if (!hasMove)
+		state = GameBase::E_LOSE;
+}
+
+int GameBase::EncodeAction(int id, int value)
+{
+	return (id << 4) | value;
+}
+
+void GameBase::DecodeAction(int action, int &id, int &value)
+{
+	id = action >> 4;
+	value = action & 0xf;
+}
+
+void Game::Print()
+{
+	cout << "\n  ===== Current Board =====" << endl;
+	board.Print();
+
+	if (state == E_WIN)
+		cout << "Congratulations! You Win!" << endl;
+
+	if (state == E_LOSE)
+		cout << "Sorry! You Lose!" << endl;
+}
+
+bool Game::Move(int direction)
+{
+	if (direction < 0 || direction >= Board::E_DIRECTION_MAX)
+		return false;
+
+	if (!GameBase::PlayerMove(direction))
+		return false;
+
+	if (!IsGameFinish())
+		GameBase::RandomGenerate();
+
+	return true;
+}
+
+string Game::Move2Str(int direction)
+{
+	switch (direction)
+	{
+	case Board::E_UP:
+		return "up";
+	case Board::E_LEFT:
+		return "left";
+	case Board::E_RIGHT:
+		return "right";
+	case Board::E_DOWN:
+		return "down";
+	default:
+		return "";
+	}
 }
