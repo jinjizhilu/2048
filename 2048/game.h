@@ -14,6 +14,7 @@ const int BOARD_SIZE = 4;
 const int GRID_NUM = BOARD_SIZE * BOARD_SIZE;
 const int VALID_ACTION_MAX = GRID_NUM * 2;
 const int WIN_CONDITION = 11;
+const int LINE_DICT_SIZE = 16 * 16 * 16 * 16;
 
 class Board
 {
@@ -40,13 +41,19 @@ public:
 	bool Move(Direction d);
 	bool Check(Direction d);
 
-	static int Coord2Id(int row, int col);
-	static void Id2Coord(int id, int &row, int &col);
-
 	array<char, GRID_NUM> grids;
 	int maxValue;
 
 private:
+	static int Coord2Id(int row, int col);
+	static void Id2Coord(int id, int &row, int &col);
+
+	static bool isLineDictReady;
+	static array<short, LINE_DICT_SIZE> lineDict;
+	static void InitLineDict();
+	static int Line2Key(const array<char, BOARD_SIZE> &line);
+	static void Key2Line(int key, array<char, BOARD_SIZE> &line);
+
 	void PrintHSplitLine();
 	void PrintVSplitLine();
 };

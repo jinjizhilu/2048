@@ -37,11 +37,14 @@ int main()
 				move = -1;
 		}
 
-		if (!g.Move(move))
+		if (g.Move(move))
 		{
-			cout << "Invalid move!\n";
+			g.Print();
 		}
-		g.Print();
+		else
+		{
+			cout << "Invalid move!" << endl;
+		}
 	}
 	cin >> input;
 
