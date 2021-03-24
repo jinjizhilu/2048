@@ -31,7 +31,7 @@ public:
 	int Search(Game *state);
 
 private:
-	static void SearchThread(int id, int seed, MCTS *mcts, clock_t startTime);
+	static void SearchThread(int id, int seed, MCTS *mcts, clock_t startTime, float searchTime);
 
 	// standard MCTS process
 	TreeNode* TreePolicy(TreeNode *node);

@@ -2,8 +2,6 @@
 #include <cmath>
 #include <cstdlib>
 
-#define max(a, b) ((a > b) ? a : b)
-
 #define USE_LINE_DICT 1
 #define OUTPUT_LINE_DICT 0
 
@@ -184,6 +182,7 @@ void Board::Key2Line(int key, array<char, BOARD_SIZE> &line)
 
 #if USE_LINE_DICT
 
+__declspec(noinline)
 bool Board::Move(Direction d)
 {
 	bool isChange = false;
@@ -224,7 +223,7 @@ bool Board::Move(Direction d)
 			for (int j = 0; j < BOARD_SIZE; ++j)
 			{
 				grids[allId[j]] = line[j];
-				maxValue = max(maxValue, line[j]);
+				maxValue = max(maxValue, (int)line[j]);
 			}
 		}
 
@@ -235,6 +234,7 @@ bool Board::Move(Direction d)
 
 #else
 
+__declspec(noinline)
 bool Board::Move(Direction d)
 {
 	bool isChange = false;
@@ -413,18 +413,29 @@ int GameBase::GetNextMove()
 	}
 	else // E_SYSTEM
 	{
-		int id = rand() % validGridCount;
-		int value = (rand() % 10 == 0) ? 2 : 1;
+		int rnd = rand();
+		int id = rnd % validGridCount;
+
+		int ratio = min(validGridCount + 1, 10);
+		int value = (rnd % ratio == 0) ? 2 : 1;
 		int action = GameBase::EncodeAction(id, value);
 		return action;
 	}
 }
 
-float GameBase::CalcScore()
+float GameBase::CalcFastStopScore()
+{
+	float score1 = CalcFinishScore();
+	float score2 = validGridCount / 8.f;
+	float score = score1 * 1.0f + score2 * 0.25f;
+	return score;
+}
+
+float GameBase::CalcFinishScore()
 {
 	float score1 = powf(2.f, (board.maxValue - WIN_CONDITION)); // 0.25, 0.5, 1, 2
 	float score2 = (turn - 200.f) / 1000.f;
-	float score = score1 * 0.5f + score2 * 0.5f;
+	float score = score1 * 0.2f + score2 * 0.8f;
 	return score;
 }
 

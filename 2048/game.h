@@ -16,6 +16,15 @@ const int VALID_ACTION_MAX = GRID_NUM * 2;
 const int WIN_CONDITION = 11;
 const int LINE_DICT_SIZE = 16 * 16 * 16 * 16;
 
+using std::max;
+using std::min;
+
+template<typename T>
+inline T clamp(T x, T min, T max)
+{
+	return std::max(std::min(x, max), min);
+}
+
 class Board
 {
 public:
@@ -72,7 +81,8 @@ public:
 	bool IsGameFinish();
 	int GetSide();
 	int GetNextMove();
-	float CalcScore();
+	float CalcFastStopScore();
+	float CalcFinishScore();
 	void GetValidActions(array<uint8_t, VALID_ACTION_MAX> &result, int &count);
 
 	void Move(int action);

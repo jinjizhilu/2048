@@ -8,12 +8,14 @@
 const char* LOG_FILE = "MCTS.log";
 const char* LOG_FILE_FULL = "MCTS_FULL.log";
 const float Cp = 2.0f;
-const float SEARCH_TIME = 0.25f;
+const float SEARCH_TIME_MIN = 0.05f;
+const float SEARCH_TIME_MAX = 1.0f;
 const int	EXPAND_THRESHOLD = 1;
 const bool	ENABLE_MULTI_THREAD = true;
 
-const float	FAST_STOP_THRESHOLD = 0.2f;
-const float	FAST_STOP_BRANCH_FACTOR = 0.02f;
+const int	FAST_STOP_ESTIMATE_COUNT = 4;
+const int	FAST_STOP_STEPS_MAX = 400;
+const int	FAST_STOP_STEPS_MIN = 100;
 
 const bool	ENABLE_TRY_MORE_NODE = false;
 const int	TRY_MORE_NODE_THRESHOLD = 1000;
@@ -50,7 +52,7 @@ MCTS::~MCTS()
 
 mutex mtx;
 
-void MCTS::SearchThread(int id, int seed, MCTS *mcts, clock_t startTime)
+void MCTS::SearchThread(int id, int seed, MCTS *mcts, clock_t startTime, float searchTime)
 {
 	srand(seed); // need to call srand for each thread
 	float elapsedTime = 0;
@@ -68,7 +70,7 @@ void MCTS::SearchThread(int id, int seed, MCTS *mcts, clock_t startTime)
 		mtx.unlock();
 
 		elapsedTime = float(clock() - startTime) / 1000;
-		if (elapsedTime > SEARCH_TIME)
+		if (elapsedTime > searchTime)
 		{
 			mtx.lock();
 			TreeNode *mostVisit = *max_element(mcts->root->children.begin(), mcts->root->children.end(), [](const TreeNode *a, const TreeNode *b)
@@ -78,9 +80,10 @@ void MCTS::SearchThread(int id, int seed, MCTS *mcts, clock_t startTime)
 
 			TreeNode *bestScore = mcts->BestChild(mcts->root, 0);
 			mtx.unlock();
-
-			if (mostVisit == bestScore)
-				break;
+			
+			break;
+			//if (mostVisit == bestScore)
+			//	break;
 		}
 	}
 }
@@ -94,13 +97,18 @@ int MCTS::Search(Game *state)
 	*(root->game) = *((GameBase*)state);
 	root->game->GetValidActions(root->validActions, root->validActionCount);
 
+	float boardRatio = clamp(6 - root->game->validGridCount, 1, 5) / 5.f;
+	float turnRatio = clamp((root->game->turn - 400.f) / 800.f, 0.f, 1.f);
+	float timeRatio = boardRatio * turnRatio;
+	float searchTime = SEARCH_TIME_MAX * timeRatio + SEARCH_TIME_MIN * (1 - timeRatio);
+
 	clock_t startTime = clock();
 
 	thread threads[THREAD_NUM_MAX];
 	int thread_num = ENABLE_MULTI_THREAD ? thread::hardware_concurrency() : 1;
 
 	for (int i = 0; i < thread_num; ++i)
-		threads[i] = thread(SearchThread, i, rand(), this, startTime);
+		threads[i] = thread(SearchThread, i, rand(), this, startTime, searchTime);
 
 	for (int i = 0; i < thread_num; ++i)
 		threads[i].join();
@@ -111,7 +119,7 @@ int MCTS::Search(Game *state)
 	maxDepth = 0;
 	PrintTree(root);
 	PrintFullTree(root);
-	printf("time: %.2f, iteration: %d, depth: %d, win: %.2f%% (%d/%d)\n", float(clock() - startTime) / 1000, root->visit, maxDepth, best->value * 100 / best->visit, (int)best->value, best->visit);
+	printf("plan: %.2f, time: %.2f, iteration: %d, depth: %d, win: %.2f%% (%d/%d)\n", searchTime, float(clock() - startTime) / 1000, root->visit, maxDepth, best->value * 100 / best->visit, (int)best->value, best->visit);
 	printf("fast stop count: %d, average stop steps: %d\n", fastStopCount, fastStopSteps / (fastStopCount + 1));
 
 	ClearNodes(root);
@@ -213,28 +221,32 @@ float MCTS::DefaultPolicy(TreeNode *node, int id)
 {
 	gameCache[id] = *(node->game);
 
-	float weight = 1.0f;
+	float bestValue = 0;
+	int estimateCount = 0;
+
+	int turnCount = 0;
+	float timeRatio = clamp((gameCache[id].turn - 200.f) / 1000.f, 0.f, 1.f);
+	int fastStopStep = FAST_STOP_STEPS_MIN * timeRatio + FAST_STOP_STEPS_MAX * (1 - timeRatio);
+
 	while (!gameCache[id].IsGameFinish())
 	{
-		//float factor = (1 - FAST_STOP_BRANCH_FACTOR * gameCache[id].validGridCount);
-		//weight *= max(factor, 0.5f);
-
 		int move = gameCache[id].GetNextMove();
 		gameCache[id].Move(move);
 
-		//if (weight < FAST_STOP_THRESHOLD)
-		//{
-		//	fastStopCount++;
-		//	fastStopSteps += gameCache[id].turn - node->game->turn;
+		if (++turnCount > fastStopStep)
+		{
+			float value = gameCache[id].CalcFastStopScore();
+			bestValue = max(bestValue, value);
 
-		//	int betterSide = gameCache[id].CalcBetterSide();
-		//	gameCache[id].state = betterSide; // let better side win
-		//}
+			if (++estimateCount > FAST_STOP_ESTIMATE_COUNT)
+			{
+				fastStopCount++;
+				fastStopSteps += gameCache[id].turn - node->game->turn;
+				return bestValue;
+			}
+		}
 	}
-	float value = gameCache[id].CalcScore();
-	//value = (value - 0.5f) * weight + 0.5f;
-
-	return value;
+	return gameCache[id].CalcFinishScore();
 }
 
 void MCTS::UpdateValue(TreeNode *node, float value)
