@@ -397,13 +397,17 @@ int GameBase::GetNextMove()
 	if (GetSide() == Board::E_PLAYER)
 	{
 		// naive stategy
-		static int direction[2][4] = 
+		static int direction[][4] =
 		{
 			{ Board::E_LEFT, Board::E_UP, Board::E_RIGHT, Board::E_DOWN },
-			{ Board::E_UP, Board::E_LEFT, Board::E_RIGHT, Board::E_DOWN }
+			{ Board::E_UP, Board::E_LEFT, Board::E_RIGHT, Board::E_DOWN },
+			{ Board::E_RIGHT, Board::E_UP, Board::E_LEFT, Board::E_DOWN },
+			{ Board::E_UP, Board::E_RIGHT, Board::E_LEFT, Board::E_DOWN },
+			{ Board::E_RIGHT, Board::E_LEFT, Board::E_UP, Board::E_DOWN },
+			{ Board::E_LEFT, Board::E_RIGHT, Board::E_UP, Board::E_DOWN }
 		};
 
-		int i = rand() % 2;
+		int i = rand() % 6;
 		int j = 0;
 		while (!board.Check((Board::Direction)direction[i][j]))
 		{
@@ -414,9 +418,9 @@ int GameBase::GetNextMove()
 	else // E_SYSTEM
 	{
 		int rnd = rand();
-		int id = rnd % validGridCount;
+		int id = (rnd >> 4) % validGridCount;
 
-		int ratio = min(validGridCount + 1, 10);
+		int ratio = min(validGridCount + 3, 10);
 		int value = (rnd % ratio == 0) ? 2 : 1;
 		int action = GameBase::EncodeAction(id, value);
 		return action;
@@ -425,16 +429,16 @@ int GameBase::GetNextMove()
 
 float GameBase::CalcFastStopScore()
 {
-	float score1 = CalcFinishScore();
-	float score2 = validGridCount / 8.f;
-	float score = score1 * 1.0f + score2 * 0.25f;
+	float score1 = CalcFinishScore(1.f);
+	float score2 = powf(validGridCount, 1.25) / 8.f;
+	float score = score1 * 0.8f + score2 * 0.2f;
 	return score;
 }
 
-float GameBase::CalcFinishScore()
+float GameBase::CalcFinishScore(float ratio)
 {
 	float score1 = powf(2.f, (board.maxValue - WIN_CONDITION)); // 0.25, 0.5, 1, 2
-	float score2 = (turn - 200.f) / 1000.f;
+	float score2 = ratio;
 	float score = score1 * 0.2f + score2 * 0.8f;
 	return score;
 }
@@ -460,6 +464,24 @@ void GameBase::GetValidActions(array<uint8_t, VALID_ACTION_MAX> &result, int &co
 	}
 }
 
+string GameBase::LastAction2Str()
+{
+	if (GetSide() == Board::E_PLAYER) // last action is system move
+	{
+		int id, value, row, col;
+		GameBase::DecodeAction(lastMove, id, value);
+		Board::Id2Coord(id, row, col);
+		string result(1, col + 'A');
+		result += (row + '1');
+		result += (value == 1) ? "|2" : "|4";
+		return result;
+	}
+	else // last action is player move
+	{
+		return Game::Move2Str(lastMove);
+	}
+}
+
 void GameBase::Move(int action)
 {
 	if (GetSide() == Board::E_PLAYER)
@@ -472,6 +494,7 @@ void GameBase::Move(int action)
 		GameBase::DecodeAction(action, id, value);
 		Generate(id, value);
 	}
+	lastMove = action;
 }
 
 bool GameBase::PlayerMove(int direction)
@@ -504,8 +527,9 @@ void GameBase::UpdateValidGrids()
 
 void GameBase::RandomGenerate()
 {
-	int id = rand() % validGridCount;
-	int value = (rand() % 10 == 0) ? 2 : 1;
+	int rnd = rand();
+	int id = (rnd >> 4) % validGridCount;
+	int value = (rnd % 10 == 0) ? 2 : 1;
 	Generate(id, value);
 }
 

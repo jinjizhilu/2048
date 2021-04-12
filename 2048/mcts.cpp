@@ -5,11 +5,11 @@
 #include <cstdlib>
 #include "mcts.h"
 
-const char* LOG_FILE = "MCTS.log";
+const char* LOG_FILE_FORMAT = "MCTS%d.log";
 const char* LOG_FILE_FULL = "MCTS_FULL.log";
-const float Cp = 2.0f;
+const float Cp = 1.0f;
 const float SEARCH_TIME_MIN = 0.05f;
-const float SEARCH_TIME_MAX = 1.0f;
+const float SEARCH_TIME_MAX = 0.2f;
 const int	EXPAND_THRESHOLD = 1;
 const bool	ENABLE_MULTI_THREAD = true;
 
@@ -41,8 +41,14 @@ MCTS::MCTS(int mode)
 	root = NULL;
 
 	// clear log file
-	fopen_s(&fp, LOG_FILE, "w");
-	fclose(fp);
+	for (int i = 0; i < 16; ++i)
+	{
+		char logFile[20];
+		sprintf_s(logFile, 20, LOG_FILE_FORMAT, i + 1);
+
+		fopen_s(&fp, logFile, "w");
+		fclose(fp);
+	}
 }
 
 MCTS::~MCTS()
@@ -246,7 +252,8 @@ float MCTS::DefaultPolicy(TreeNode *node, int id)
 			}
 		}
 	}
-	return gameCache[id].CalcFinishScore();
+	float ratio = (float)turnCount / fastStopStep;
+	return gameCache[id].CalcFinishScore(ratio);
 }
 
 void MCTS::UpdateValue(TreeNode *node, float value)
@@ -322,12 +329,16 @@ void MCTS::PrintTree(TreeNode *node, int level)
 {
 	if (level == 1)
 	{
-		freopen_s(&fp, LOG_FILE, "a+", stdout);
+		int logId = node->game->turn / 100 + 1;
+		char logFile[20];
+		sprintf_s(logFile, 20, LOG_FILE_FORMAT, logId);
+
+		freopen_s(&fp, logFile, "a+", stdout);
 		node->game->board.Print();
 		fclose(stdout);
 		freopen_s(&fp, "CON", "w", stdout);
 
-		fopen_s(&fp, LOG_FILE, "a+");
+		fopen_s(&fp, logFile, "a+");
 		fprintf(fp, "===============================PrintTree=============================\n");
 		fprintf(fp, "visit: %d, value: %.1f, children: %d\n", node->visit, node->value, node->children.size());
 	}
@@ -348,10 +359,10 @@ void MCTS::PrintTree(TreeNode *node, int level)
 			fprintf(fp, "   ");
 
 		float expandFactorParent_c = sqrtf(logf(node->visit)) * Cp;
-		fprintf(fp, "visit: %d, value: %.1f, score: %.4f, children: %d, move: %s\n", (*it)->visit, (*it)->value, CalcScoreFast(*it, expandFactorParent_c), (*it)->children.size(), Game::Move2Str((*it)->game->lastMove).c_str());
+		fprintf(fp, "visit: %d, value: %.1f, raw_score: %.6f, score: %.6f, children: %d, move: %s\n", (*it)->visit, (*it)->value, CalcScoreFast(*it, 0), CalcScoreFast(*it, expandFactorParent_c), (*it)->children.size(), (*it)->game->LastAction2Str().c_str());
 		PrintTree(*it, level + 1);
 
-		if (++i > 3)
+		if (++i > 4)
 			break;
 	}
 
@@ -384,7 +395,7 @@ void MCTS::PrintFullTree(TreeNode *node, int level)
 			fprintf(fp, "   ");
 
 		float expandFactorParent_c = sqrtf(logf(node->visit)) * Cp;
-		fprintf(fp, "visit: %d, value: %.1f, score: %.4f, children: %d, move: %s\n", (*it)->visit, (*it)->value, CalcScoreFast(*it, expandFactorParent_c), (*it)->children.size(), Game::Move2Str((*it)->game->lastMove).c_str());
+		fprintf(fp, "visit: %d, value: %.1f, raw_score: %.6f, score: %.6f, children: %d, move: %s\n", (*it)->visit, (*it)->value, CalcScoreFast(*it, 0), CalcScoreFast(*it, expandFactorParent_c), (*it)->children.size(), (*it)->game->LastAction2Str().c_str());
 		PrintFullTree(*it, level + 1);
 	}
 

@@ -53,10 +53,10 @@ public:
 	array<char, GRID_NUM> grids;
 	int maxValue;
 
-private:
 	static int Coord2Id(int row, int col);
 	static void Id2Coord(int id, int &row, int &col);
 
+private:
 	static bool isLineDictReady;
 	static array<short, LINE_DICT_SIZE> lineDict;
 	static void InitLineDict();
@@ -82,8 +82,9 @@ public:
 	int GetSide();
 	int GetNextMove();
 	float CalcFastStopScore();
-	float CalcFinishScore();
+	float CalcFinishScore(float ratio);
 	void GetValidActions(array<uint8_t, VALID_ACTION_MAX> &result, int &count);
+	string LastAction2Str();
 
 	void Move(int action);
 	bool PlayerMove(int direction);
