@@ -13,6 +13,12 @@ int main()
 	string input;
 	int move;
 
+	array<char, GRID_NUM> grids = { 1, 7, 10, 9,
+								    4,  5, 6, 1,
+								    1,  3, 2, 5,
+								    0,  3, 1, 3 };
+	//((GameBase*)&g)->SetDebugBoard(grids);
+
 	g.Print();
 	while (!g.IsGameFinish())
 	{

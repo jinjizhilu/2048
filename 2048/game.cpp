@@ -430,16 +430,14 @@ int GameBase::GetNextMove()
 float GameBase::CalcFastStopScore()
 {
 	float score1 = CalcFinishScore(1.f);
-	float score2 = powf(validGridCount, 1.25) / 8.f;
-	float score = score1 * 0.8f + score2 * 0.2f;
+	float score2 = clamp(validGridCount, 0, 8) / 8.f;
+	float score = score1 + score2 * 0.2f;
 	return score;
 }
 
 float GameBase::CalcFinishScore(float ratio)
 {
-	float score1 = powf(2.f, (board.maxValue - WIN_CONDITION)); // 0.25, 0.5, 1, 2
-	float score2 = ratio;
-	float score = score1 * 0.2f + score2 * 0.8f;
+	float score = ratio * 0.8f;
 	return score;
 }
 
@@ -480,6 +478,19 @@ string GameBase::LastAction2Str()
 	{
 		return Game::Move2Str(lastMove);
 	}
+}
+
+void GameBase::SetDebugBoard(const array<char, GRID_NUM> &grids)
+{
+	int total = 0;
+	for (int i = 0; i < GRID_NUM; ++i)
+	{
+		board.grids[i] = grids[i];
+		total += pow(2, grids[i]);
+	}
+	UpdateValidGrids();
+	total = int((float)total / 2.2);
+	turn = (total % 2 == 1) ? total : total + 1;
 }
 
 void GameBase::Move(int action)

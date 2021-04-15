@@ -85,6 +85,7 @@ public:
 	float CalcFinishScore(float ratio);
 	void GetValidActions(array<uint8_t, VALID_ACTION_MAX> &result, int &count);
 	string LastAction2Str();
+	void SetDebugBoard(const array<char, GRID_NUM> &grids);
 
 	void Move(int action);
 	bool PlayerMove(int direction);

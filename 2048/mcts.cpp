@@ -41,7 +41,7 @@ MCTS::MCTS(int mode)
 	root = NULL;
 
 	// clear log file
-	for (int i = 0; i < 16; ++i)
+	for (int i = 0; i < 20; ++i)
 	{
 		char logFile[20];
 		sprintf_s(logFile, 20, LOG_FILE_FORMAT, i + 1);
